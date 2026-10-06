@@ -43,6 +43,11 @@ class GameEngine:
         self.tone_freqs = [261, 329, 392, 523]   # Red, Blue, Green, Yellow
         self.sounds = self.build_sounds()
 
+        # Task 4: per-step countdown
+        self.turn_time_limit = 3000   # ms allowed for each click
+        self.turn_start_time = 0
+        self.game_over_reason = "WRONG PATTERN! GAME OVER"
+
         self.start_next_round()
 
     def build_sounds(self):
@@ -83,6 +88,7 @@ class GameEngine:
     def start_next_round(self):
         new_color = random.randint(0, 3)
         self.sequence.append(new_color)
+        self.game_over_reason = "WRONG PATTERN! GAME OVER"
 
         # Task 2: playback accelerates as score rises (floors 180ms / 80ms).
         # Computed from score here, so reset() (score = 0) restores the start speed.
@@ -129,6 +135,12 @@ class GameEngine:
                         self.step_start_time = now
                     else:
                         self.state = "PLAYER_TURN"
+                        self.turn_start_time = now
+
+        if self.state == "PLAYER_TURN":
+            if now - self.turn_start_time >= self.turn_time_limit:
+                self.state = "GAME_OVER"
+                self.game_over_reason = "TIME'S UP! GAME OVER"
 
     def handle_event(self, event):
         if self.state == "GAME_OVER":
@@ -157,6 +169,8 @@ class GameEngine:
         if len(self.player_input) == len(self.sequence):
             self.score += 1
             self.start_next_round()
+        else:
+            self.turn_start_time = pygame.time.get_ticks()  # fresh time for the next click
 
     def reset(self):
         self.stop_tones()
@@ -185,12 +199,28 @@ class GameEngine:
         for btn in self.buttons:
             btn.render(screen)
 
+        if self.state == "PLAYER_TURN":
+            bar_w, bar_h = 300, 16
+            bar_x = self.width // 2 - bar_w // 2
+            bar_y = 470
+            elapsed = pygame.time.get_ticks() - self.turn_start_time
+            frac = max(0.0, 1.0 - elapsed / self.turn_time_limit)
+            if frac > 0.5:
+                bar_color = (80, 240, 130)
+            elif frac > 0.25:
+                bar_color = (255, 220, 80)
+            else:
+                bar_color = (240, 70, 70)
+            pygame.draw.rect(screen, (50, 54, 64), (bar_x, bar_y, bar_w, bar_h), border_radius=8)
+            if frac > 0:
+                pygame.draw.rect(screen, bar_color, (bar_x, bar_y, int(bar_w * frac), bar_h), border_radius=8)
+
         if self.state == "GAME_OVER":
             overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
             overlay.fill((0, 0, 0, 200))
             screen.blit(overlay, (0, 0))
 
-            over_surf = self.font_title.render("WRONG PATTERN! GAME OVER", True, (240, 70, 70))
+            over_surf = self.font_title.render(self.game_over_reason, True, (240, 70, 70))
             screen.blit(over_surf, (self.width // 2 - over_surf.get_width() // 2, self.height // 2 - 40))
 
             final_score_surf = self.font_medium.render(f"Final Score: {self.score}", True, (255, 255, 255))
