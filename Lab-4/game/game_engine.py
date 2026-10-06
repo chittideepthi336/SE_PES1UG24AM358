@@ -42,9 +42,14 @@ class GameEngine:
 
     def start_next_round(self):
         new_color = random.randint(0, 3)
-
         self.sequence.append(new_color)
 
+        # Task 2: playback accelerates as score rises (floors 180ms / 80ms).
+        # Computed from score here, so reset() (score = 0) restores the start speed.
+        self.flash_duration = max(180, 450 - self.score * 40)
+        self.pause_duration = max(80, 200 - self.score * 20)
+
+        # clear stale click-flash from the previous round's last click
         if self.player_lit_button is not None:
             self.player_lit_button.is_lit = False
             self.player_lit_button = None
@@ -95,7 +100,6 @@ class GameEngine:
                     btn.is_lit = True
                     self.player_lit_button = btn
                     self.player_lit_start = pygame.time.get_ticks()
-
                     self.register_player_click(btn.color_id)
                     break
 
