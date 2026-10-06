@@ -1,4 +1,6 @@
+import math
 import random
+import array
 import pygame
 from game.color_button import ColorButton
 
@@ -38,7 +40,45 @@ class GameEngine:
         self.font_title = pygame.font.SysFont(None, 40)
         self.font_medium = pygame.font.SysFont(None, 28)
 
+        self.tone_freqs = [261, 329, 392, 523]   # Red, Blue, Green, Yellow
+        self.sounds = self.build_sounds()
+
         self.start_next_round()
+
+    def build_sounds(self):
+        # Synthesize sine tones in memory (no external files).
+        if not pygame.mixer.get_init():
+            try:
+                pygame.mixer.init()
+            except pygame.error:
+                return []
+        freq, fmt, channels = pygame.mixer.get_init()
+        if fmt != -16:
+            return []  # we only generate signed 16-bit samples
+        sounds = []
+        duration = 0.30
+        n = int(freq * duration)
+        fade = int(freq * 0.02)  # 20ms fade in/out to avoid clicks
+        for f in self.tone_freqs:
+            buf = array.array("h")
+            for i in range(n):
+                env = min(1.0, i / fade, (n - i) / fade)
+                v = int(32767 * 0.35 * env * math.sin(2 * math.pi * f * i / freq))
+                for _ in range(channels):
+                    buf.append(v)
+            sounds.append(pygame.mixer.Sound(buffer=buf.tobytes()))
+        return sounds
+
+    def play_tone(self, color_id):
+        if not self.sounds:
+            return
+        for s in self.sounds:
+            s.stop()  # cut any still-playing tone so they never overlap
+        self.sounds[color_id].play()
+
+    def stop_tones(self):
+        for s in self.sounds:
+            s.stop()
 
     def start_next_round(self):
         new_color = random.randint(0, 3)
@@ -60,6 +100,7 @@ class GameEngine:
         self.step_start_time = pygame.time.get_ticks()
         self.is_flashing = True
         self.buttons[self.sequence[0]].is_lit = True
+        self.play_tone(self.sequence[0])
 
     def update(self):
         now = pygame.time.get_ticks()
@@ -83,6 +124,7 @@ class GameEngine:
                     if self.showing_step < len(self.sequence):
                         next_id = self.sequence[self.showing_step]
                         self.buttons[next_id].is_lit = True
+                        self.play_tone(next_id)
                         self.is_flashing = True
                         self.step_start_time = now
                     else:
@@ -100,6 +142,7 @@ class GameEngine:
                     btn.is_lit = True
                     self.player_lit_button = btn
                     self.player_lit_start = pygame.time.get_ticks()
+                    self.play_tone(btn.color_id)
                     self.register_player_click(btn.color_id)
                     break
 
@@ -116,6 +159,7 @@ class GameEngine:
             self.start_next_round()
 
     def reset(self):
+        self.stop_tones()
         self.sequence.clear()
         self.player_input.clear()
         self.score = 0
